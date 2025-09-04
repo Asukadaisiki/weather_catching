@@ -2,8 +2,9 @@ import requests
 import json
 import time
 import jwt
+import csv
 
-location_code='101280803'#南海
+
 API_Host='nf6vhf4knm.re.qweatherapi.com'
 PROJECT_ID='39KVBQYAB9'
 KEY_ID='CBB6BT4W4W'
@@ -27,9 +28,27 @@ encoded_jwt = jwt.encode(payload, private_key, algorithm='EdDSA', headers = head
 
 print(f"JWT:  {encoded_jwt}")
 
-url=f"https://{API_Host}/v7/weather/now?location={location_code}"
 
-def get_weather(url,jwt_token):
+
+def find_city (city):
+    try:
+        with open('D:/LocationList/China-City-List-latest.csv','r',encoding='utf-8') as file :
+            next(file)
+            reader =csv.DictReader(file)
+
+            for row in reader:
+                if row['Location_Name_ZH']==city:
+                    return row["Location_ID"]
+        return None
+    except FileNotFoundError:
+        print("文件未找到，请确认文件路径和名称是否正确")
+        return None
+
+
+
+def get_weather(jwt_token,location_code):
+
+    url=f"https://{API_Host}/v7/weather/now?location={location_code}"
     
     headers = {
         'Authorization': f'Bearer {jwt_token}',
@@ -58,7 +77,10 @@ def get_weather(url,jwt_token):
 
 
 def main():
-    weather_data=get_weather(url,encoded_jwt)
+    city = input("请输入城市名称: ")
+    location_code=find_city(city)
+    print(f"📍 地区: {city} (代码: {location_code})")
+    weather_data=get_weather(encoded_jwt,location_code)
     temp = weather_data['now']['temp']  # 温度
     feels_like = weather_data['now']['feelsLike']  # 体感温度
     humidity = weather_data['now']['humidity']  # 湿度
@@ -69,7 +91,6 @@ def main():
     # 格式化输出
     print("🌤️ 实时天气信息")
     print("=" * 30)
-    print(f"📍 地区: 南海 (代码: {location_code})")
     print(f"🌡️ 温度: {temp}°C")
     print(f"🤔 体感温度: {feels_like}°C")
     print(f"💧 湿度: {humidity}%")
