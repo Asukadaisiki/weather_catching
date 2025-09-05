@@ -3,7 +3,9 @@ import json
 import time
 import jwt
 import csv
-
+import os
+from datetime import datetime
+import pandas as pd
 
 API_Host='nf6vhf4knm.re.qweatherapi.com'
 PROJECT_ID='39KVBQYAB9'
@@ -27,6 +29,64 @@ headers = {
 encoded_jwt = jwt.encode(payload, private_key, algorithm='EdDSA', headers = headers)
 
 print(f"JWT:  {encoded_jwt}")
+
+def flatten_weather_data(data):
+    """
+    展平嵌套的天气数据
+    """
+    flattened = data.copy()  # 复制原始数据
+    
+    # 展平now字段
+    if 'now' in flattened and isinstance(flattened['now'], dict):
+        for key, value in flattened['now'].items():
+            flattened[f'now_{key}'] = value
+        del flattened['now']  # 删除原始的now字段
+    
+    # 展平refer字段
+    if 'refer' in flattened and isinstance(flattened['refer'], dict):
+        # 处理sources数组
+        if 'sources' in flattened['refer']:
+            flattened['refer_sources'] = ', '.join(flattened['refer']['sources'])
+        # 处理license数组
+        if 'license' in flattened['refer']:
+            flattened['refer_license'] = ', '.join(flattened['refer']['license'])
+        del flattened['refer']  # 删除原始的refer字段
+    
+    return flattened
+
+
+def append_weather_data(new_data, filename):
+    """
+    处理嵌套数据并追加到文件
+    """
+    new_data['record_time'] = datetime.now().isoformat()
+    
+    # 展平数据
+    flattened_data = flatten_weather_data(new_data)
+    
+    # 转换为DataFrame
+    new_df = pd.DataFrame([flattened_data])
+    
+    if not os.path.exists(filename):
+        # 保存为Excel（更适合表格数据）
+        new_df.to_excel(filename.replace('.json', '.xlsx'), index=False)
+        # 同时保存JSON备份
+        new_df.to_json(filename, orient='records', force_ascii=False, indent=4)
+        print(f"创建文件并添加第一条数据")
+    else:
+        try:
+            # 读取现有数据
+            existing_df = pd.read_json(filename, encoding='utf-8')
+            # 追加新数据
+            combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+            # 保存
+            combined_df.to_excel(filename.replace('.json', '.xlsx'), index=False)
+            combined_df.to_json(filename, orient='records', force_ascii=False, indent=4)
+            print(f"数据已追加到 {filename}")
+        except Exception as e:
+            print(f"错误: {e}")
+            new_df.to_excel(filename.replace('.json', '.xlsx'), index=False)
+            new_df.to_json(filename, orient='records', force_ascii=False, indent=4)
 
 
 
@@ -77,10 +137,12 @@ def get_weather(jwt_token,location_code):
 
 
 def main():
-    city = input("请输入城市名称: ")
+    city = input("请输入地区名称: ")
     location_code=find_city(city)
     print(f"📍 地区: {city} (代码: {location_code})")
     weather_data=get_weather(encoded_jwt,location_code)
+    append_weather_data(weather_data,'weather_data.json')
+
     temp = weather_data['now']['temp']  # 温度
     feels_like = weather_data['now']['feelsLike']  # 体感温度
     humidity = weather_data['now']['humidity']  # 湿度
